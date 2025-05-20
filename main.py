@@ -1,3 +1,5 @@
+import os
+import sys
 import threading
 import tkinter as tk
 from tkinter import messagebox
@@ -37,7 +39,7 @@ class BorderlessApp:
         tk.Button(mid, text="← Revertir",  command=self.revert_selected).pack(pady=10)
         tk.Button(mid, text="🔄 Refrescar", command=self.refresh_lists).pack(pady=10)
 
-        # Inicializamos las listas y el tray
+        # Carga inicial de listas y setup del tray
         self.refresh_lists()
         self._setup_tray()
 
@@ -46,9 +48,9 @@ class BorderlessApp:
         self.lst_avail.delete(0, tk.END)
         self.lst_active.delete(0, tk.END)
 
-        # Obtenemos todas las ventanas visibles no ya borderless
+        # Todas las ventanas visibles no ya borderless
         all_windows = utils.list_windows()
-        # Excluimos la que tenga el mismo título que nuestra app
+        # Excluimos la que tenga título igual al de nuestra app
         self.avail = [(h, t) for (h, t) in all_windows if t != self.app_title]
 
         for hwnd, title in self.avail:
@@ -96,18 +98,26 @@ class BorderlessApp:
         utils.revert_all()
         self.root.after(0, self.root.destroy)
 
+    def _get_icon_path(self):
+        """
+        Devuelve la ruta del icono .ico, ya sea en modo desarrollo
+        o dentro del bundle de PyInstaller (_MEIPASS).
+        """
+        base_path = getattr(sys, '_MEIPASS', os.path.abspath("."))
+        return os.path.join(base_path, "resources", "icon.ico")
+
     def _setup_tray(self):
         """Configura el icono en la bandeja y su menú."""
-        # Tuple para que infi.systray concatene correctamente el 'Quit'
         menu_options = (
             ("Abrir Manager", None, self.show_window),
         )
+        icon_path = self._get_icon_path()
         self.tray = SysTrayIcon(
-            "resources/icon.ico",    # Icono .ico en resources/
-            self.app_title,          # Tooltip
+            icon_path,                  # Ruta resuelta al ico
+            self.app_title,             # Tooltip
             menu_options,
-            on_quit=self.quit_app,   # Llamado al hacer click en “Quit”
-            default_menu_index=0     # Clic izquierdo → Abrir Manager
+            on_quit=self.quit_app,      # Llamado al seleccionar "Quit"
+            default_menu_index=0        # Clic izquierdo → Abrir Manager
         )
         threading.Thread(target=self.tray.start, daemon=True).start()
 
