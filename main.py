@@ -1,10 +1,21 @@
-import os
 import sys
+import os
 import threading
 import tkinter as tk
 from tkinter import messagebox
-from infi.systray import SysTrayIcon
 
+# Mutex para evitar instancias múltiples en Windows
+import win32event
+import win32api
+import winerror
+
+mutex = win32event.CreateMutex(None, False, "BorderlessManagerMutex")
+if win32api.GetLastError() == winerror.ERROR_ALREADY_EXISTS:
+    # Ya hay una instancia corriendo
+    sys.exit(0)
+
+# Resto de imports
+from infi.systray import SysTrayIcon
 import utils
 import win32gui
 
@@ -12,9 +23,16 @@ class BorderlessApp:
     def __init__(self, root):
         self.root = root
         self.app_title = "Borderless Manager"
+
+        # Título e icono de ventana
         root.title(self.app_title)
+        icon_path = self._get_icon_path()
+        try:
+            root.iconbitmap(icon_path)
+        except Exception:
+            pass
+
         root.geometry("800x450")
-        # Evitamos el cierre definitivo
         root.protocol("WM_DELETE_WINDOW", self.hide_window)
 
         # Layout: tres columnas
@@ -48,15 +66,11 @@ class BorderlessApp:
         self.lst_avail.delete(0, tk.END)
         self.lst_active.delete(0, tk.END)
 
-        # Todas las ventanas visibles no ya borderless
         all_windows = utils.list_windows()
-        # Excluimos la que tenga título igual al de nuestra app
         self.avail = [(h, t) for (h, t) in all_windows if t != self.app_title]
-
         for hwnd, title in self.avail:
             self.lst_avail.insert(tk.END, f"{hwnd} - {title}")
 
-        # Ventanas que ya están en modo borderless
         self.active = [(h, win32gui.GetWindowText(h)) for h in utils._original_states]
         for hwnd, title in self.active:
             self.lst_active.insert(tk.END, f"{hwnd} - {title}")
@@ -113,16 +127,16 @@ class BorderlessApp:
         )
         icon_path = self._get_icon_path()
         self.tray = SysTrayIcon(
-            icon_path,                  # Ruta resuelta al ico
-            self.app_title,             # Tooltip
+            icon_path,
+            self.app_title,
             menu_options,
-            on_quit=self.quit_app,      # Llamado al seleccionar "Quit"
-            default_menu_index=0        # Clic izquierdo → Abrir Manager
+            on_quit=self.quit_app,
+            default_menu_index=0
         )
         threading.Thread(target=self.tray.start, daemon=True).start()
 
 
 if __name__ == "__main__":
     root = tk.Tk()
-    app = BorderlessApp(root)
+    app  = BorderlessApp(root)
     root.mainloop()

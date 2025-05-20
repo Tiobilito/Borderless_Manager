@@ -10,6 +10,7 @@ pyinstaller ^
   --onedir ^
   --windowed ^
   --noupx ^
+  --icon "resources\icon.ico" ^
   --add-data "resources\icon.ico;resources" ^
   main.py ^
   --name BorderlessManager

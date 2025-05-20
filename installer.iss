@@ -5,7 +5,7 @@
 [Setup]
 AppName=Borderless Manager
 AppVersion=1.0
-DefaultDirName={pf}\BorderlessManager
+DefaultDirName={commonpf}\BorderlessManager
 DefaultGroupName=Borderless Manager
 OutputBaseFilename=BorderlessManagerSetup
 Compression=none
