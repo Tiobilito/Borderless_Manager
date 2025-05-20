@@ -2,7 +2,6 @@ import threading
 import tkinter as tk
 from tkinter import messagebox
 from infi.systray import SysTrayIcon
-from PIL import Image  # si necesitas manipular el icono, aunque infi.systray carga directamente el .ico
 
 import utils
 import win32gui
@@ -10,9 +9,10 @@ import win32gui
 class BorderlessApp:
     def __init__(self, root):
         self.root = root
-        root.title("Borderless Manager")
+        self.app_title = "Borderless Manager"
+        root.title(self.app_title)
         root.geometry("800x450")
-        # Al cerrar la ventana principal, solo la ocultamos
+        # Evitamos el cierre definitivo
         root.protocol("WM_DELETE_WINDOW", self.hide_window)
 
         # Layout: tres columnas
@@ -37,21 +37,24 @@ class BorderlessApp:
         tk.Button(mid, text="← Revertir",  command=self.revert_selected).pack(pady=10)
         tk.Button(mid, text="🔄 Refrescar", command=self.refresh_lists).pack(pady=10)
 
-        # Carga inicial de listas y setup del tray
+        # Inicializamos las listas y el tray
         self.refresh_lists()
         self._setup_tray()
 
     def refresh_lists(self):
-        """Recarga las dos listas desde utils."""
+        """Recarga ambas listas, excluyendo la ventana principal por título."""
         self.lst_avail.delete(0, tk.END)
         self.lst_active.delete(0, tk.END)
 
-        # Ventanas no borderless aún
-        self.avail = utils.list_windows()
+        # Obtenemos todas las ventanas visibles no ya borderless
+        all_windows = utils.list_windows()
+        # Excluimos la que tenga el mismo título que nuestra app
+        self.avail = [(h, t) for (h, t) in all_windows if t != self.app_title]
+
         for hwnd, title in self.avail:
             self.lst_avail.insert(tk.END, f"{hwnd} - {title}")
 
-        # Ventanas que ya tienen borderless
+        # Ventanas que ya están en modo borderless
         self.active = [(h, win32gui.GetWindowText(h)) for h in utils._original_states]
         for hwnd, title in self.active:
             self.lst_active.insert(tk.END, f"{hwnd} - {title}")
@@ -81,32 +84,31 @@ class BorderlessApp:
             messagebox.showerror("Error al revertir", str(e))
 
     def hide_window(self):
-        """Oculta la ventana principal en lugar de cerrar la app."""
+        """Oculta la ventana principal sin cerrar la app."""
         self.root.withdraw()
 
     def show_window(self, systray=None):
-        """Muestra la ventana principal (clic izquierdo en el icono)."""
+        """Muestra la ventana principal (clic izquierdo)."""
         self.root.after(0, self.root.deiconify)
 
     def quit_app(self, systray=None):
-        """Restaura todas las ventanas y cierra la aplicación."""
+        """Restaura todas las ventanas y termina la aplicación."""
         utils.revert_all()
         self.root.after(0, self.root.destroy)
 
     def _setup_tray(self):
         """Configura el icono en la bandeja y su menú."""
-        # Usamos una tupla de opciones para que infi.systray pueda concatenar correctamente
+        # Tuple para que infi.systray concatene correctamente el 'Quit'
         menu_options = (
             ("Abrir Manager", None, self.show_window),
         )
         self.tray = SysTrayIcon(
-            "resources/icon.ico",         # Ruta al icono .ico
-            "Borderless Manager",         # Tooltip
+            "resources/icon.ico",    # Icono .ico en resources/
+            self.app_title,          # Tooltip
             menu_options,
-            on_quit=self.quit_app,        # Se ejecuta al seleccionar "Quit"
-            default_menu_index=0          # Clic izquierdo ejecuta menu_options[0]
+            on_quit=self.quit_app,   # Llamado al hacer click en “Quit”
+            default_menu_index=0     # Clic izquierdo → Abrir Manager
         )
-        # Ejecutar el tray icon en un hilo demonio para no bloquear la UI
         threading.Thread(target=self.tray.start, daemon=True).start()
 
 
