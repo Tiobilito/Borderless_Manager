@@ -1,64 +1,58 @@
+import threading
 import tkinter as tk
 from tkinter import messagebox
-from utils import list_windows, make_borderless, revert_borderless, _original_states
+from PIL import Image
+from pystray import Icon, MenuItem, Menu
+
+import utils
+import win32gui
 
 class BorderlessApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Borderless Manager")
-        self.root.geometry("800x450")
+        root.title("Borderless Manager")
+        root.geometry("800x450")
 
-        # Frames para organizar
-        left_frame = tk.Frame(root)
-        middle_frame = tk.Frame(root)
-        right_frame = tk.Frame(root)
-        left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
-        middle_frame.pack(side=tk.LEFT, fill=tk.Y, padx=5, pady=5)
-        right_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
+        # Evita que cierre, solo oculta
+        root.protocol("WM_DELETE_WINDOW", self.hide_window)
 
-        # Listbox de ventanas disponibles
-        tk.Label(left_frame, text="Ventanas disponibles").pack()
-        self.lst_avail = tk.Listbox(left_frame, width=50, height=20)
-        self.lst_avail.pack(fill=tk.BOTH, expand=True)
+        # Layout
+        left = tk.Frame(root); mid = tk.Frame(root); right = tk.Frame(root)
+        for f in (left, mid, right): f.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
 
-        # Listbox de ventanas borderless activas
-        tk.Label(right_frame, text="Borderless activas").pack()
-        self.lst_active = tk.Listbox(right_frame, width=50, height=20)
-        self.lst_active.pack(fill=tk.BOTH, expand=True)
+        tk.Label(left, text="Ventanas disponibles").pack()
+        self.lst_avail = tk.Listbox(left, width=50, height=20); self.lst_avail.pack(fill=tk.BOTH, expand=True)
 
-        # Botones
-        btn_apply = tk.Button(middle_frame, text="→ Aplicar", command=self.apply_selected)
-        btn_revert = tk.Button(middle_frame, text="← Revertir", command=self.revert_selected)
-        btn_refresh = tk.Button(middle_frame, text="🔄 Refrescar", command=self.refresh_lists)
-        btn_apply.pack(pady=10)
-        btn_revert.pack(pady=10)
-        btn_refresh.pack(pady=10)
+        tk.Label(right, text="Borderless activas").pack()
+        self.lst_active = tk.Listbox(right, width=50, height=20); self.lst_active.pack(fill=tk.BOTH, expand=True)
+
+        tk.Button(mid, text="→ Aplicar",   command=self.apply_selected).pack(pady=10)
+        tk.Button(mid, text="← Revertir",  command=self.revert_selected).pack(pady=10)
+        tk.Button(mid, text="🔄 Refrescar", command=self.refresh_lists).pack(pady=10)
 
         self.refresh_lists()
+        self._setup_tray()
 
     def refresh_lists(self):
-        # Recarga ambas listas
         self.lst_avail.delete(0, tk.END)
         self.lst_active.delete(0, tk.END)
 
-        self.avail = list_windows()
+        self.avail = utils.list_windows()
         for hwnd, title in self.avail:
             self.lst_avail.insert(tk.END, f"{hwnd} - {title}")
 
-        # Las activas las obtenemos de _original_states
-        self.active = [(hwnd, win32gui.GetWindowText(hwnd)) for hwnd in _original_states]
+        self.active = [(h, win32gui.GetWindowText(h)) for h in utils._original_states]
         for hwnd, title in self.active:
             self.lst_active.insert(tk.END, f"{hwnd} - {title}")
 
     def apply_selected(self):
         sel = self.lst_avail.curselection()
         if not sel:
-            messagebox.showwarning("Error", "Selecciona una ventana para aplicar.")
+            messagebox.showwarning("Error", "Selecciona una ventana.")
             return
-        index = sel[0]
-        hwnd, _ = self.avail[index]
+        hwnd, _ = self.avail[sel[0]]
         try:
-            make_borderless(hwnd)
+            utils.make_borderless(hwnd)
             self.refresh_lists()
         except Exception as e:
             messagebox.showerror("Error", str(e))
@@ -66,20 +60,39 @@ class BorderlessApp:
     def revert_selected(self):
         sel = self.lst_active.curselection()
         if not sel:
-            messagebox.showwarning("Error", "Selecciona una ventana para revertir.")
+            messagebox.showwarning("Error", "Selecciona una ventana.")
             return
-        index = sel[0]
-        hwnd, _ = self.active[index]
+        hwnd, _ = self.active[sel[0]]
         try:
-            revert_borderless(hwnd)
+            utils.revert_borderless(hwnd)
             self.refresh_lists()
         except Exception as e:
             messagebox.showerror("Error", str(e))
 
+    def hide_window(self):
+        self.root.withdraw()
+
+    def show_window(self, icon, item):
+        self.root.after(0, self.root.deiconify)
+
+    def quit_app(self, icon, item):
+        # Revertir todo antes de salir
+        utils.revert_all()
+        icon.stop()
+        self.root.after(0, self.root.destroy)
+
+    def _setup_tray(self):
+        # Carga icono
+        image = Image.open("resources/icon.png")
+        menu = Menu(
+            MenuItem("Abrir Manager", self.show_window),
+            MenuItem("Salir",         self.quit_app)
+        )
+        self.tray_icon = Icon("BorderlessManager", image, "Borderless", menu)
+        # Ejecutar icon.run() en hilo aparte
+        threading.Thread(target=self.tray_icon.run, daemon=True).start()
 
 if __name__ == "__main__":
-    # Necesitamos win32gui aquí para refrescar títulos de activas
-    import win32gui
     root = tk.Tk()
     app = BorderlessApp(root)
     root.mainloop()

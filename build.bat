@@ -1,4 +1,4 @@
 @echo off
-echo Compilando BorderlessApp...
-pyinstaller --noconfirm --onefile --windowed main.py --name Borderless_Fail
+echo Compilando Borderless Manager...
+pyinstaller --noconfirm --onefile --windowed --add-data "resources/icon.png;resources" main.py --name BorderlessManager
 pause
