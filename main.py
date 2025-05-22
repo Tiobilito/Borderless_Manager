@@ -1,6 +1,7 @@
 import sys
 import os
 import threading
+import json
 import tkinter as tk
 from tkinter import messagebox
 
@@ -22,10 +23,17 @@ class BorderlessApp:
         self.root = root
         self.app_title = "Borderless Manager"
 
+        # Ruta de configuración
+        base_path = getattr(sys, '_MEIPASS', os.path.abspath("."))
+        self.config_path = os.path.join(base_path, "config.json")
+
         # Variables de configuración
         self.selected_ratio      = tk.StringVar(value="16:9")
         self.selected_resolution = tk.StringVar(value="")
         self.selected_alignment  = tk.StringVar(value="C")
+
+        # Intentar cargar config previa
+        self.load_config()
 
         # Título e icono de ventana
         root.title(self.app_title)
@@ -67,6 +75,31 @@ class BorderlessApp:
             self.root.iconbitmap(icon_path)
         except Exception:
             pass
+
+    def load_config(self):
+        """Carga la configuración desde disk si existe."""
+        try:
+            with open(self.config_path, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+            self.selected_ratio.set(cfg.get("ratio", self.selected_ratio.get()))
+            self.selected_resolution.set(cfg.get("resolution", self.selected_resolution.get()))
+            self.selected_alignment.set(cfg.get("alignment", self.selected_alignment.get()))
+        except (FileNotFoundError, json.JSONDecodeError):
+            # No existe o corrupto: usar valores por defecto
+            pass
+
+    def save_config(self):
+        """Guarda la configuración actual a disk."""
+        cfg = {
+            "ratio":      self.selected_ratio.get(),
+            "resolution": self.selected_resolution.get(),
+            "alignment":  self.selected_alignment.get()
+        }
+        try:
+            with open(self.config_path, "w", encoding="utf-8") as f:
+                json.dump(cfg, f, indent=2)
+        except Exception as e:
+            messagebox.showerror("Error al guardar configuración", str(e))
 
     def refresh_lists(self):
         self._load_available_windows()
@@ -140,6 +173,17 @@ class BorderlessApp:
 
     def open_config_window(self):
         config = tk.Toplevel(self.root)
+        config.update_idletasks()
+        win_w, win_h = 350, 400
+        # posición y tamaño de la ventana principal
+        root_x = self.root.winfo_rootx()
+        root_y = self.root.winfo_rooty()
+        root_w = self.root.winfo_width()
+        root_h = self.root.winfo_height()
+        # cálculo de coords para centrar
+        x = root_x + (root_w  - win_w) // 2
+        y = root_y + (root_h - win_h) // 2
+        config.geometry(f"{win_w}x{win_h}+{x}+{y}")
         config.title("Configuración Borderless")
         config.geometry("350x400")
         config.transient(self.root)
@@ -199,6 +243,7 @@ class BorderlessApp:
         def detect_resolution():
             sw = win32api.GetSystemMetrics(0)
             sh = win32api.GetSystemMetrics(1)
+            # elegir aspect ratio más cercano
             target = sw / sh
             ratios = {k: eval(k.replace(":", "/")) for k in aspect_ratios.keys()}
             best = min(ratios, key=lambda k: abs(ratios[k] - target))
@@ -209,12 +254,17 @@ class BorderlessApp:
         tk.Button(config, text="📏 Detectar resolución actual", command=detect_resolution).pack(pady=10)
 
         # Confirmar / Cancelar
-        tk.Button(config, text="✅ Confirmar", command=config.destroy).pack(pady=5)
-        def cancel():
-            self.selected_ratio.set("16:9")
-            self.selected_resolution.set("")
-            self.selected_alignment.set("C")
+        def confirm():
+            self.save_config()
             config.destroy()
+
+        tk.Button(config, text="✅ Confirmar", command=confirm).pack(pady=5)
+
+        def cancel():
+            # recargar última config guardada
+            self.load_config()
+            config.destroy()
+
         tk.Button(config, text="❌ Cancelar", command=cancel).pack(pady=5)
 
 
