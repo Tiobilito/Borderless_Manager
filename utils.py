@@ -1,4 +1,3 @@
-# utils.py
 import win32gui
 import win32con
 import win32api
@@ -10,70 +9,70 @@ from ctypes import wintypes
 _original_states = {}
 
 def is_borderless(hwnd):
-    """¿Ya hemos aplicado borderless a esta ventana?"""
     return hwnd in _original_states
 
 def get_original_states():
-    """Devuelve una copia de los estados originales guardados."""
     return _original_states.copy()
 
 def list_windows(exclude_hwnds=None):
-    """
-    Lista todas las ventanas visibles con título no vacío,
-    excluyendo los hwnd en `exclude_hwnds`.
-    """
     windows = []
-    exclude_hwnds = set(exclude_hwnds or [])
-
-    def _enum(hwnd, _):
-        if hwnd in exclude_hwnds:
+    exclude = set(exclude_hwnds or [])
+    def _enum(h, _):
+        if h in exclude:
             return
-        if win32gui.IsWindowVisible(hwnd):
-            title = win32gui.GetWindowText(hwnd).strip()
-            if title:
-                windows.append((hwnd, title))
-
+        if win32gui.IsWindowVisible(h):
+            t = win32gui.GetWindowText(h).strip()
+            if t:
+                windows.append((h, t))
     win32gui.EnumWindows(_enum, None)
     return windows
 
-def make_borderless(hwnd):
-    """
-    Aplica borderless “forzado” a la ventana hwnd:
-      1. Guarda style/exstyle/rect originales.
-      2. Sustituye por WS_POPUP|WS_VISIBLE.
-      3. Limpia EXSTYLE que dibuja bordes.
-      4. Ajusta al tamaño de pantalla.
-      5. Elimina marcos DWM (Win10+).
-    """
+def make_borderless(hwnd, custom_width=None, custom_height=None, alignment="C"):
     if hwnd in _original_states:
-        return  # ya aplicado
+        return
 
-    # 1) Guardar estado original
+    # Guardar estado original
     orig_style = win32gui.GetWindowLong(hwnd, win32con.GWL_STYLE)
     orig_ex    = win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE)
     rect       = win32gui.GetWindowRect(hwnd)
     _original_states[hwnd] = (orig_style, orig_ex, rect)
 
-    # 2) Nuevo style y exstyle limpio
-    popup_style = win32con.WS_POPUP | win32con.WS_VISIBLE
+    # Aplicar estilos borderless
+    popup = win32con.WS_POPUP | win32con.WS_VISIBLE
     clean_ex = orig_ex & ~(win32con.WS_EX_DLGMODALFRAME |
                            win32con.WS_EX_WINDOWEDGE    |
                            win32con.WS_EX_CLIENTEDGE    |
                            win32con.WS_EX_STATICEDGE)
-
-    win32gui.SetWindowLong(hwnd, win32con.GWL_STYLE,  popup_style)
+    win32gui.SetWindowLong(hwnd, win32con.GWL_STYLE, popup)
     win32gui.SetWindowLong(hwnd, win32con.GWL_EXSTYLE, clean_ex)
 
-    # 3) Maximizar al tamaño de pantalla
-    sw = win32api.GetSystemMetrics(0)
-    sh = win32api.GetSystemMetrics(1)
+    # Determinar tamaño
+    screen_w = win32api.GetSystemMetrics(0)
+    screen_h = win32api.GetSystemMetrics(1)
+    w = custom_width  or screen_w
+    h = custom_height or screen_h
+
+    # Calcular posición según alignment
+    offs = {
+        "NW": (0, 0),
+        "N":  ((screen_w - w)//2, 0),
+        "NE": (screen_w - w, 0),
+        "W":  (0, (screen_h - h)//2),
+        "C":  ((screen_w - w)//2, (screen_h - h)//2),
+        "E":  (screen_w - w, (screen_h - h)//2),
+        "SW": (0, screen_h - h),
+        "S":  ((screen_w - w)//2, screen_h - h),
+        "SE": (screen_w - w, screen_h - h),
+    }
+    x, y = offs.get(alignment, (0, 0))
+
     win32gui.SetWindowPos(
         hwnd, None,
-        0, 0, sw, sh,
+        x, y, w, h,
         win32con.SWP_NOZORDER | win32con.SWP_FRAMECHANGED
     )
 
-    # 4) Quitar marco DWM en Win10+ (opcional)
+    # Quitar marco DWM en Win10+
     try:
         DWMWA_EXTENDED_FRAME_BOUNDS = 9
         val = ctypes.c_int(0)
@@ -87,10 +86,6 @@ def make_borderless(hwnd):
         pass
 
 def revert_borderless(hwnd):
-    """
-    Restaura el style/exstyle/posición original de hwnd
-    si antes se le aplicó make_borderless.
-    """
     if hwnd not in _original_states:
         return
 
@@ -98,7 +93,7 @@ def revert_borderless(hwnd):
     left, top, right, bottom = rect
     width, height = right - left, bottom - top
 
-    win32gui.SetWindowLong(hwnd, win32con.GWL_STYLE,  orig_style)
+    win32gui.SetWindowLong(hwnd, win32con.GWL_STYLE, orig_style)
     win32gui.SetWindowLong(hwnd, win32con.GWL_EXSTYLE, orig_ex)
     win32gui.SetWindowPos(
         hwnd, None,
@@ -107,7 +102,6 @@ def revert_borderless(hwnd):
     )
 
 def revert_all():
-    """Restaura todas las ventanas a su estado original."""
     for hwnd in list(_original_states.keys()):
         try:
             revert_borderless(hwnd)
