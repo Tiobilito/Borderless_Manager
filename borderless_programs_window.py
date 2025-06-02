@@ -4,8 +4,7 @@ import json
 import tkinter as tk
 from tkinter import messagebox, simpledialog
 import utils
-
-BORDERLESS_PROGRAMS_PATH = os.path.join(getattr(sys, '_MEIPASS', os.path.abspath(".")), "borderless_programs.json")
+from constants import BORDERLESS_PROGRAMS_PATH
 
 def load_borderless_programs():
     try:

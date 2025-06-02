@@ -18,6 +18,8 @@ from infi.systray import SysTrayIcon
 import utils
 import win32gui
 from borderless_programs_window import open_borderless_programs_window, BORDERLESS_PROGRAMS_PATH
+from config_window import ConfigWindow
+from constants import ICON_PATH, CONFIG_PATH
 
 def load_borderless_programs():
     try:
@@ -38,17 +40,13 @@ class BorderlessApp:
         self.root = root
         self.app_title = "Borderless Manager"
 
-        # Ruta de configuración
-        base_path = getattr(sys, '_MEIPASS', os.path.abspath("."))
-        self.config_path = os.path.join(base_path, "config.json")
-
         # Variables de configuración
         self.selected_ratio      = tk.StringVar(value="16:9")
         self.selected_resolution = tk.StringVar(value="")
         self.selected_alignment  = tk.StringVar(value="C")
 
         # Intentar cargar config previa
-        self.load_config()
+        ConfigWindow.load_config(self)
 
         # Título e icono de ventana
         root.title(self.app_title)
@@ -276,100 +274,12 @@ class BorderlessApp:
         threading.Thread(target=self.tray.start, daemon=True).start()
 
     def open_config_window(self):
-        config = tk.Toplevel(self.root)
-        config.update_idletasks()
-        win_w, win_h = 350, 400
-        # posición y tamaño de la ventana principal
-        root_x = self.root.winfo_rootx()
-        root_y = self.root.winfo_rooty()
-        root_w = self.root.winfo_width()
-        root_h = self.root.winfo_height()
-        # cálculo de coords para centrar
-        x = root_x + (root_w  - win_w) // 2
-        y = root_y + (root_h - win_h) // 2
-        config.geometry(f"{win_w}x{win_h}+{x}+{y}")
-        config.title("Configuración Borderless")
-        config.geometry("350x400")
-        config.transient(self.root)
-        config.grab_set()
-
-        aspect_ratios = {
-            "16:9": [(1920,1080),(1600,900),(1280,720)],
-            "4:3":  [(1024,768),(800,600)],
-            "21:9": [(2560,1080),(3440,1440)],
-        }
-
-        # Aspect Ratio
-        tk.Label(config, text="Aspect Ratio").pack(pady=5)
-        ratio_menu = tk.OptionMenu(
-            config,
+        ConfigWindow(
+            self.root,
             self.selected_ratio,
-            *aspect_ratios.keys(),
-            command=lambda _: update_resolutions()
+            self.selected_resolution,
+            self.selected_alignment
         )
-        ratio_menu.pack()
-
-        # Resolución
-        tk.Label(config, text="Resolución").pack(pady=5)
-        self.res_menu = tk.OptionMenu(config, self.selected_resolution, "")
-        self.res_menu.pack()
-
-        def update_resolutions():
-            menu = self.res_menu["menu"]
-            menu.delete(0, "end")
-            for w,h in aspect_ratios[self.selected_ratio.get()]:
-                s = f"{w}x{h}"
-                menu.add_command(label=s, command=lambda v=s: self.selected_resolution.set(v))
-            w0,h0 = aspect_ratios[self.selected_ratio.get()][0]
-            self.selected_resolution.set(f"{w0}x{h0}")
-
-        update_resolutions()
-
-        # Posición (“cruceta”)
-        tk.Label(config, text="Posición en pantalla").pack(pady=5)
-        grid = tk.Frame(config)
-        grid.pack()
-        coords = [
-            [("NW",0,0),("N",1,0),("NE",2,0)],
-            [("W",0,1),("C",1,1),("E",2,1)],
-            [("SW",0,2),("S",1,2),("SE",2,2)],
-        ]
-        for label,x,y in [cell for row in coords for cell in row]:
-            rb = tk.Radiobutton(
-                grid,
-                variable=self.selected_alignment,
-                value=label,
-                text=label
-            )
-            rb.grid(column=x, row=y, padx=5, pady=5)
-
-        # Detectar resolución y aspect ratio automático
-        def detect_resolution():
-            sw = win32api.GetSystemMetrics(0)
-            sh = win32api.GetSystemMetrics(1)
-            # elegir aspect ratio más cercano
-            target = sw / sh
-            ratios = {k: eval(k.replace(":", "/")) for k in aspect_ratios.keys()}
-            best = min(ratios, key=lambda k: abs(ratios[k] - target))
-            self.selected_ratio.set(best)
-            update_resolutions()
-            self.selected_resolution.set(f"{sw}x{sh}")
-
-        tk.Button(config, text="📏 Detectar resolución actual", command=detect_resolution).pack(pady=10)
-
-        # Confirmar / Cancelar
-        def confirm():
-            self.save_config()
-            config.destroy()
-
-        tk.Button(config, text="✅ Confirmar", command=confirm).pack(pady=5)
-
-        def cancel():
-            # recargar última config guardada
-            self.load_config()
-            config.destroy()
-
-        tk.Button(config, text="❌ Cancelar", command=cancel).pack(pady=5)
 
     def open_borderless_programs(self):
         open_borderless_programs_window(self.root)
