@@ -107,3 +107,14 @@ def revert_all():
             revert_borderless(hwnd)
         except Exception:
             pass
+
+def hwnds_by_title(title):
+    """Devuelve todos los hwnds que coinciden exactamente con el título dado."""
+    result = []
+    def _enum(h, _):
+        if win32gui.IsWindowVisible(h):
+            t = win32gui.GetWindowText(h).strip()
+            if t == title:
+                result.append(h)
+    win32gui.EnumWindows(_enum, None)
+    return result
